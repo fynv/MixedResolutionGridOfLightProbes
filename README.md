@@ -10,7 +10,7 @@ The technique mainly tackles with the issue that the requirement of probe densit
 
 It is clear that the technique can increase the efficiency of storage and network transfer of pre-computed GI information, because of the reduced amount of data. It also reduces the time needed for GI data preparation, because of the reduced total number of probes. However, it is also observed that there is some marginal performance loss at runtime on some devices, due to the increased complexity of data structure. Therefore, for performance sensitive uses, we offer an option to convert a mixed-resolution grid of light probes to an uniform grid, which can be done any time before applying it to a scene.
 
-While the technique could potentially have more use-cases, such as using it together with GPU accelerated ray-tracing for dynamic global illumination, we are currently unable to evaluate these scenarios because of the setup of Three.V8, which is mobile targeted and doesn't contain a ray-tracing system. 
+While the technique could potentially have more use-cases, such as using it together with GPU accelerated ray-tracing for dynamic global illumination, we are currently unable to evaluate these scenarios because of the setup of Three.V8, which is mobile targeted and doesn't contain a ray-tracing system. Here we provide the details of the technique, so that it will be easy for any people to implement and test it if they are interested in other application scenarios.
 
 # Related Techniques
 
@@ -49,11 +49,33 @@ We first overview what the structure of a constructed mixed resolution grid look
 
 ## The Grid Structure
 
-<img src="structure.png" width="600" height="400">
+<img src="structure.png" width="420">
 
-The picture shows a mixed resolution grid in 2D form. The base(0th) level of the grid has a 3x2 division. 4 of the 6 base cells are subdivided into 16 subcells of the 1st level, then 3 of the 16 1st level cells are subdivided into 12 subcells of the 2nd level. Note that each probe is located at the center of its cell, following the same pattern of textures.
+The picture shows a mixed resolution grid in 2D form. The base(0th) level of the grid has a 3x2 division. 4 of the 6 base cells are subdivided into 16 subcells of the 1st level, then 3 of the 16 1st level cells are subdivided into 12 subcells of the 2nd level. Note that each probe is located at the center of its cell, following the same pattern of textures. With only 27 probes, the mixed resolution grid can possibly provide the same effective resolution that a 12x8 uniform grid can provide, if the presented way of subdivision is consistent with the underlying geometries.
+
+For RAM storage, a mixed-resolution grid of light probe consists of the following data items.
+
+* `vec3 coverage_min`: world space coordinate of the minimum position.
+* `vec3 coverage_min`: world space coordinate of the maximum position.
+* `ivec3 base_divisions`: divisions of the base level grid.
+* `int sub_division_level`: maximum level of subdivisions. The logical resolution of the grid would be `base_divisions * (1<<sub_division_level)`.
+* `vector<vec4> probe_data`: linear array of probe data. 10 x vec4 for each probe. The first vec4 stores the world-space position of the probe in its xyz channels, and the resolution level in its w channel. The other 9 vec4 stores its SH-Coefficients.
+* `vector<uint16> visibility_data`: 2D visibility(distance) data packed in the same way as DDGI does, which can be transferred to a GPU texture directly. (See sec.3 of [[1]](#1)) Visibility of each probe is represented using a 16x16x2x16bit texture tile. The only difference is that way store the distances and distance standard variances in normalized integer form instead of using half-precision float.
+* `vector<int> index`: index array representing the grid structure. 
+
+Each item of the `index` array is corresponding to an octree node, either a leaf node or not. For a leaf node at `i`, `index[i]` stores index of the probe. Corresponding probe data starts from `probe_data[index[i]*10]`. 
+For a non-leaf node at `i`, `index[i]` stores the index of a subdivided node + `probe_count`, where `probe_count` is the number of probes. Index information of its 8 children can be found in `index` starting from `index[base_count + (index[i]-probe_count)*8]`, where `base_count = base_divisions.x * base_divisions.y * base_divisions.z`. 
+
+<img src="index.png" width="600">
+
+We still use our 2D case for example. Remember we have 27 probes, so an `index[i]<27` is a leaf node, and the index points to the probe. For `index[i]>=27`, we can look for its children at `index[6 + (index[i]-27) * 4]`.
+
+Before rendering, the `index` data is transferred to GPU buffer as is, which can be traversed by the shaders. The `probe_data` is also transferred GPU, from which we can get the probe position, level and SH data. The SH data can be linearly combined by during rendering before evaluating the irradiance. However it is 9 colors which is a little bit heavy. Therefore we insert an irradiance pre-sampling pre-process step to convert each SH probe to a 8x8x32bit(GL_R11G11B10F) texture tile, which is the form how DDGI stores its irradiance data (sec.3 of [[1]](#1)). 
 
 ## Constructing the Grid
+
+
+
 
 ## Sampling the Grid
 
