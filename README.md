@@ -147,10 +147,39 @@ The process is straight forward. First, it is quite safe to just duplicate the S
 
 # Results
 
+We have integrated both uniform grid of probes and mixed-resolution grid of probes in our scene editor ("GameDev" sub-project of Three.V8). When testing with the same scenes with NVIDIA RTX 2060 Super, the 2 kinds of probe grids has no visual difference or only some subtle difference. Performance difference is insignificant. Mixed-resolution grids use less storage space to a varying degrees.
+
+All datasets are obtained from [McGuire Computer Graphics Archive](#7). We acknowledge all content creators for sharing the works.
 
 
+<img src="sponza_uniform.jpg" width="600">
+
+**sponza.glb using uniform grid, 40x24x24 divisions, 23040 probes, 31.7MB**
+
+<img src="sponza_mixed.jpg" width="600">
+
+**sponza.glb using mixed-resolution grid, 5x3x3 base-divisions, 3 subdivision levels, 9488 probes, 13.3MB**
+
+<img src="salle_de_bain_uniform.jpg" width="600">
+
+**salle_de_bain.glb using uniform grid, 16x16x16 divisions, 4096 probes, 5.62MB**
+
+<img src="salle_de_bain_mixed.jpg" width="600">
+
+**salle_de_bain.glb using mixed-resolution grid, 2x2x2 base-divisions, 3 subdivision levels, 1800 probes, 2.56MB**
+
+<img src="fireplace_uniform.jpg" width="600">
+
+**fireplace.glb using uniform grid, 12x8x12 divisions, 1152 probes, 1.58MB**
+
+<img src="fireplace_mixed.jpg" width="600">
+
+**fireplace.glb using mixed-resolution grid, 3x2x3 base-divisions, 2 subdivision levels, 809 probes, 1.16MB**
+
+The most noticeable difference occurs with the "salle_de_bain" data where there is large variance of lighting in the empty area, where it is under sampled in the case of a mixed-resolution grid.
 
 # Conclusion
+
 
 
 
@@ -174,3 +203,7 @@ Sloan P. P. 2013. Efficient Spherical Harmonic Evaluation. Journal of Computer G
 
 <a id="6">[6]</a> 
 Cigolle, Z. H., Donow, S., Evangelakos, D., Mara, M., Mcguire, M., AND Meyer, Q. 2014. A survey of efficient representations for independent unit vectors. Journal of Computer Graphics Techniques (JCGT)
+
+<a id="7">[7]</a> 
+Morgan McGuire, Computer Graphics Archive, July 2017 (https://casual-effects.com/data)
+
