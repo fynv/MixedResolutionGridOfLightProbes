@@ -4,13 +4,13 @@ Mar. 2023
 
 # Introduction 
 
-This article introduces an experimental feature of the open-source project [Three.V8]( https://github.com/fynv/Three.V8), namely Mixed-resolution Grid of Light Probes (or LODProbeGrid which is used for coding).  Three.V8 is a 3D rendering engine and application framework that integrates Google's V8 JavaScript engine, so that games and applications can be coded in JavaScript, while the 3D rendering part is based on the full-featured, native graphics APIs. The LODProbeGrid is a global illumination component of Three.V8, which is evolved from Uniform Grid of Light Probes, the latter is a simple and widely used GI structure. Comparing the uniform grid, the proposed mixed-resolution gird is more compact in storage. It maintains less number of light probes while still meeting the same requirement of probe density.
+This article introduces an experimental feature of the open-source project [Three.V8]( https://github.com/fynv/Three.V8), namely Mixed-resolution Grid of Light Probes (or LODProbeGrid which is used for coding).  Three.V8 is a 3D rendering engine and application framework that integrates Google's V8 JavaScript engine, so that games and applications can be coded in JavaScript, while the 3D rendering part is based on the full-featured, native graphics APIs. The LODProbeGrid is a global illumination component of Three.V8, which is evolved from Uniform Grid of Light Probes, the latter is a simple and widely used GI structure. Comparing to the uniform grid, the proposed mixed-resolution gird is more compact in storage. It maintains less number of light probes while still meeting the same requirement of probe density.
 
 The technique mainly tackles with the issue that the requirement of probe density is often varying across the scene, because of the uneven distribution of geometry. An uniform grid of probes can be inefficient when such a requirement is present.  An uniform grid only have a fixed density everywhere, therefore, it often ends up either containing much more probes than necessary (oversampling), or use a lower density than necessary (undersampling). In view of such deficiency of an uniform grid, we propose a mixed-resolution, non-uniform grid for probe placement. We will introduce an algorithm to decide the level of subdivision for different areas of space, which will construct the structure of the grid automatically according to the geometry distribution of the scene. At the same time, because of the change to the probe grid structure, we also have to adopt a modified probe sampling scheme during rendering.
 
 It is clear that the technique can increase the efficiency of storage and network transfer of pre-computed GI information, because of the reduced amount of data. It also reduces the time needed for GI data preparation, because of the reduced total number of probes. However, it is also observed that there is some minor performance loss at runtime on some devices, due to the increased complexity of data structure. Therefore, for performance sensitive uses, we offer an option to convert a mixed-resolution grid of light probes to an uniform grid, which can be done any time before applying it to a scene.
 
-While the technique could potentially have more use-cases, such as using it together with GPU accelerated ray-tracing for dynamic global illumination, we are currently unable to evaluate these scenarios because of the setup of Three.V8, which is mobile targeted and doesn't contain a ray-tracing system. Here we provide the details of the technique, so that it will be easy for any people to implement and test it if they are interested in other application scenarios.
+While the technique could potentially have more use-cases, such as using it together with GPU accelerated ray-tracing for dynamic global illumination, we are currently unable to evaluate these scenarios because of the setup of Three.V8, which is mobile targeted and doesn't contain a ray-tracing system. Here we provide the details of the technique, so that it will be easy for people to implement and test it if they are interested in other application scenarios.
 
 # Related Techniques
 
@@ -22,7 +22,7 @@ We use spherical harmonics to approximate the irradiance function at different s
 
 ## Uniform Grid of Light Probes
 
-The simplest form of GI could be using pre-computed irradiance probes distributed in a uniform grid. It is the easiest for shaders to look up the nearest probe around a spatial point, and perform trilinear interpolation. 
+The simplest form of GI could be using pre-computed irradiance probes distributed in a uniform grid. It is the easiest for shaders to look up the nearest probes around a spatial point, and perform trilinear interpolation. 
 
 Uniform grids of probes are used in NVIDIA's DDGI[[1]](#1) and related works[[2]](#2). The interpolation and weighting scheme proposed in these works, including the visibility test using distance information, has largely resolved the artifacts seen in earlier uniform grid systems, and made it robust to a large range of different environments. In this work, we derive our probe interpolation and weighting scheme based on the tricks used in DDGI for our mixed resolution grid, while restricting to precomputed GI only.
 
@@ -56,11 +56,11 @@ The picture shows a mixed resolution grid in 2D form. The base(0th) level of the
 For RAM storage, a mixed-resolution grid of light probe consists of the following data items.
 
 * `vec3 coverage_min`: world space coordinate of the minimum position.
-* `vec3 coverage_min`: world space coordinate of the maximum position.
+* `vec3 coverage_max`: world space coordinate of the maximum position.
 * `ivec3 base_divisions`: divisions of the base level grid.
 * `int sub_division_level`: maximum level of subdivisions. The logical resolution of the grid would be `base_divisions * (1<<sub_division_level)`.
 * `vector<vec4> probe_data`: linear array of probe data. 10 x vec4 for each probe. The first vec4 stores the world-space position of the probe in its xyz channels, and the resolution level in its w channel. The other 9 vec4 stores its SH-Coefficients.
-* `vector<uint16> visibility_data`: 2D visibility(distance) data packed in the same way as DDGI does, which can be transferred to a GPU texture directly. (See sec.3 of [[1]](#1)) Visibility of each probe is represented using a 16x16x2x16bit texture tile. The only difference is that way store the distances and distance standard variances in normalized integer form instead of using half-precision float.
+* `vector<uint16> visibility_data`: 2D visibility(distance) data packed in the same way as DDGI does, which can be transferred to a GPU texture directly. (See sec.3 of [[1]](#1)) Visibility of each probe is represented using a 16x16x2x16bit texture tile. The only difference is that we store the distances and distance standard variances in normalized integer form instead of using half-precision float.
 * `vector<int> index`: index array representing the grid structure. 
 
 Each item of the `index` array is corresponding to an octree node, either a leaf node or not. For a leaf node at `i`, `index[i]` stores index of the probe. Corresponding probe data starts from `probe_data[index[i]*10]`. 
@@ -78,7 +78,7 @@ The mixed-resolution grid of light probe can pre-computed during data preparatio
 
 A crucial step of constructing a mixed-resolution grid is to decided which cells of each level should be subdivided to the next level. To that purpose, we use voxelization to figure out which subdivisions are necessary. A necessary subdivision is one that, after the subdivision, there are some pairs of sub-cells located at two different sides of some triangle faces. If all sub-cells are at the same side of the geometries, then that subdivision is not necessary to happen. Also, if a subdivision is identified as necessary, then the base-cell should exist in the first place, so its parent is necessary to be subdivided as well. 
 
-We perform the voxelization at the highest resolution `base_divisions * (1<<sub_division_level)`. We need the information whether there is some triangle passing through 2 neighboring cells. We store the information in a 3D-Texture format. We use GL_R8UI as the pixel format and only use its 3 least-significant-bits, corresponding to the intersecting state of -x, -y and -z directions of a cell. The voxelization is done in 3 passes along the 3 axis. The shaders for the x direction looks like:
+We perform the voxelization at the highest resolution `base_divisions * (1<<sub_division_level)`. We need the information whether there is some triangle passing through 2 neighboring cells. We store the information in a 3D-Texture format. We use GL_R8UI as the pixel format and only use its 3 least-significant-bits, corresponding to the intersecting state of -x, -y and -z directions of a cell. The voxelization is done in 3 passes along the 3 axis. The shaders for the x direction look like:
 
 ```c
 // vertex shader - x
@@ -135,9 +135,9 @@ SH-Coefficients needs to be baked iteratively, which involves the whole renderin
 
 As described previously, a constructed mixed-resolution grid has a logical resolution of `base_divisions * (1<<sub_division_level)`. Basically, we can sample that logical grid just like sampling an uniform grid. In Three.V8, we use similar code to sample a mixed_resolution grid (LODProbeGrid) as to sample an uniform grid (ProbeGrid), with some modifications. Both can be found in "StandardRoutine.cpp"
 
-For a given position of a logical probe `ivec3 ipos`, we need to get the index of an actual probe, which involves traversing the `index` data. First, we can find a cell in the base grid. The position `ipos_base = ipos / (1<<sub_division_level)`. This is where the traversal starts. For each non-leaf cell, we move on to one of its 8 children using bit values from `ipos`. `get_probe_idx()` in the shader code implements the algorithm.
+For a given position of a logical probe `ivec3 ipos`, we need to get the index of an actual probe, which involves traversing the `index` data. First, we can find a cell in the base grid. The position `ipos_base = ipos / (1<<sub_division_level)`. This is where the traversal starts. For each non-leaf cell, we move on to one of its 8 children using bit values from `ipos` until a leaf is found. `get_probe_idx()` in the shader code implements the algorithm.
 
-The interpolation and weighting part is the same as an uniform grid, which follows the tricks used in the DDGI. First reduce the weight of back-face probes using the dot-product of probe direction and the surface normal. The visibility weight is multiplied in, which is calculated using mean- and variance-biased Chebyshev interpolants (sec.5.2 of [[1]](#1)). Finally the trilinear interpolation weights are applied. The actual positions of the probes are used instead of the logical positions, except for the trilinear interpolation.
+The interpolation and weighting part is the same as an uniform grid, which follows the tricks used in the DDGI. First reduce the weight of back-face probes using the dot-product of probe direction and the surface normal. Then the visibility weight is multiplied in, which is calculated using mean- and variance-biased Chebyshev interpolants (sec.5.2 of [[1]](#1)). Finally the trilinear interpolation weights are applied. The actual positions of the probes are used instead of the logical positions, except for the trilinear interpolation.
 
 ## Conversion to Uniform Grid
 
