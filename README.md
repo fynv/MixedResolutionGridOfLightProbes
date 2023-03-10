@@ -180,7 +180,7 @@ The most noticeable difference occurs with the "salle_de_bain" data where there 
 
 # Conclusion
 
-
+The technique mixed-resolution grid of light probes has some obvious advantages in storage saving and baking performance aspects. However, the potential use-cases in relation to GPU accelerated ray-tracing is unclear, which we will go on exploring as our next priority. The possible degradation in runtime performance and rendering quality in some rare cases is also in need of more tests and evaluations. We are therefore sharing the detail of the technique to people who may need it, and also hoping for more tests and evaluations from the community.
 
 
 # References
